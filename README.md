@@ -70,9 +70,9 @@ Gaussian noise added to mimic real thermocouples.
 
 | metric | value |
 |---|---|
-| relative L2 error over the full (x,t) grid | **0.17%** |
+| relative L2 error over the full (x,t) grid | **0.18%** |
 | max absolute error anywhere | 0.13 C |
-| final PDE residual | 5.9e-07 |
+| final PDE residual | 2.8e-07 |
 
 ![forward](figures/forward_pinn_vs_fdm.png)
 
@@ -130,6 +130,25 @@ Two honest readings of this table:
 
 Also noted: the 3-sensor/2C cell beating the 1C cell is single-seed noise
 luck - a proper study would average multiple noise realizations per cell.
+The ensemble section below quantifies exactly this seed-to-seed spread.
+
+### Uncertainty quantification: ensemble of 5 inverse PINNs
+
+Five members, each with a different network init AND a different noise
+realization (headline config: 3 sensors, 1 C noise). `ensemble_uq.py`:
+
+| | value |
+|---|---|
+| member estimates | 0.05142, 0.04862, 0.04957, 0.04966, 0.04473 |
+| ensemble mean | 0.0488 |
+| ensemble std | 0.0022 |
+| true h inside mean +/- 2 std | yes |
+| mean error | 2.4% |
+
+One member landed 10.5% off (seed 4) - a single-run estimate can silently be
+that member. The ensemble both averages the error down and hands you an
+honest error bar, which is what you would actually want before trusting a
+recovered cooling coefficient on a real tube design.
 
 ### Baseline bake-off: same sparse data, full-field reconstruction
 
@@ -152,16 +171,17 @@ PDE, which is the entire point of the method.
 - ground truth is a numerical solver, not physical sensor data
 - radiative losses ignored, convection linearized with a single constant h
 - the heat source Q(x) is a synthetic Gaussian, not measured drive power
-- the envelope time constant tau is fixed; in the forward model it is set to
-  1/h which mildly encodes prior knowledge of the cooling rate (the inverse
-  model uses a generic tau=15 so the true h does not leak into it)
+- the sensitivity table is one seed per cell; only the headline configuration
+  got the full 5-member ensemble treatment
 
 ## What I'd do differently / extensions
 
 - 2D (x, r) model of the tube cross-section
-- ensemble PINNs for uncertainty bands on the recovered h
+- extend the ensemble treatment to every sensitivity cell (done for the
+  headline config, see the UQ section)
 - validate against a real tube with actual thermocouples
 - swap the synthetic Q for drive-current-derived power density
+- joint inversion of h AND Q amplitude from the same sparse data
 
 ## Repo layout
 
@@ -194,6 +214,7 @@ python3 sensitivity_study.py
 python3 baselines/least_squares_h.py
 python3 baselines/data_only_nn.py
 python3 baselines/lstm_baseline.py
+python3 ensemble_uq.py
 ```
 
 Everything trains on CPU in minutes.
