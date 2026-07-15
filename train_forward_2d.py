@@ -117,6 +117,15 @@ def train(adam_epochs=12000, lbfgs_steps=800, seed=0, verbose=True):
                   "robin", round(float(lb.item()), 8),
                   "relL2", round(rel, 5), flush=True)
 
+    if not os.path.exists("results"):
+        os.makedirs("results")
+    torch.save(model.state_dict(), "results/forward_pinn_2d.pth")
+    rel_adam = relative_l2(model, x_grid, r_grid, times, snaps)
+    with open("results/forward_2d_metrics.txt", "w") as f:
+        f.write("relative_l2 " + str(rel_adam) + "\n")
+        f.write("stage adam_only\n")
+    print("adam checkpoint saved, relL2", round(rel_adam, 5), flush=True)
+
     xf = torch.rand(6000, 1) * problem.L
     rhof = torch.rand(6000, 1)
     tf = torch.rand(6000, 1) * problem.T_total
@@ -143,11 +152,10 @@ def train(adam_epochs=12000, lbfgs_steps=800, seed=0, verbose=True):
     else:
         print("GATE FAIL 2d still above 3 percent")
 
-    if not os.path.exists("results"):
-        os.makedirs("results")
     torch.save(model.state_dict(), "results/forward_pinn_2d.pth")
     with open("results/forward_2d_metrics.txt", "w") as f:
         f.write("relative_l2 " + str(rel) + "\n")
+        f.write("stage adam_plus_lbfgs\n")
 
     return model, rel
 
