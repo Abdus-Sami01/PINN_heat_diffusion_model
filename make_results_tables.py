@@ -68,17 +68,17 @@ def main():
             out.append(row)
         out.append("")
 
-    field = []
-    fwd_rel = fwd.get("relative_l2") if fwd else None
+    fullgrid = read_kv("results/forward_fullgrid.txt")
     dnn = read_kv("results/baseline_data_only.txt")
     lstm = read_kv("results/baseline_lstm.txt")
-    if fwd_rel is not None and dnn and lstm:
+    if fullgrid and dnn and lstm:
         out.append("### Full-field reconstruction from the same information")
         out.append("")
         out.append("| model | uses physics | full grid rel L2 | max abs error (C) |")
         out.append("|---|---|---|---|")
         out.append("| forward PINN | yes | " +
-                    str(round(fwd_rel * 100, 2)) + "% | 0.13 |")
+                    str(round(fullgrid["relative_l2"] * 100, 2)) + "% | " +
+                    str(round(fullgrid["max_abs_error"], 2)) + " |")
         out.append("| data-only NN | no | " +
                     str(round(dnn["relative_l2"] * 100, 2)) + "% | " +
                     str(round(dnn["max_abs_error"], 2)) + " |")

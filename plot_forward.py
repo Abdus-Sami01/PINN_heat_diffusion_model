@@ -35,6 +35,10 @@ def main():
     print("full grid relative L2:", round(float(rel), 5))
     print("max abs error:", round(float(err.max()), 4), "C")
 
+    with open("results/forward_fullgrid.txt", "w") as f:
+        f.write("relative_l2 " + str(float(rel)) + "\n")
+        f.write("max_abs_error " + str(float(err.max())) + "\n")
+
     fig, axes = plt.subplots(1, 3, figsize=(16, 4.5))
 
     im0 = axes[0].imshow(T_grid, aspect="auto", origin="lower",
