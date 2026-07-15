@@ -38,7 +38,7 @@ def train(adam_epochs=12000, lbfgs_steps=1000, seed=0, verbose=True):
     np.random.seed(seed)
 
     model = HardPINN(problem.L, problem.T_total, problem.T_ambient,
-                     tau=1.0 / problem.h_true)
+                     tau=15.0)
 
     opt = torch.optim.Adam(model.parameters(), lr=1e-3)
     sched = torch.optim.lr_scheduler.StepLR(opt, step_size=3000, gamma=0.5)

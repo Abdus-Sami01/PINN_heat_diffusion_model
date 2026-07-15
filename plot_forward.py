@@ -14,7 +14,7 @@ def main():
         os.makedirs("figures")
 
     model = HardPINN(problem.L, problem.T_total, problem.T_ambient,
-                     tau=1.0 / problem.h_true)
+                     tau=15.0)
     model.load_state_dict(torch.load("results/forward_pinn.pth"))
     model.eval()
 
