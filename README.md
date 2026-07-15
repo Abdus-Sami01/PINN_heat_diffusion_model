@@ -150,6 +150,26 @@ that member. The ensemble both averages the error down and hands you an
 honest error bar, which is what you would actually want before trusting a
 recovered cooling coefficient on a real tube design.
 
+### Joint inversion: h AND source power, both unknown
+
+Same 3 noisy sensors, but now the source amplitude P is also a learnable
+parameter (initialized at 4.0, true 2.0, while h starts at 0.15). `joint_inverse.py`:
+
+| parameter | init | true | recovered | error |
+|---|---|---|---|---|
+| h | 0.15 | 0.05 | 0.0461 | 7.8% |
+| P | 4.0 | 2.0 | 1.855 | 7.3% |
+| P/h ratio | - | 40.0 | 40.26 | **0.65%** |
+
+![joint](figures/joint_inversion.png)
+
+The individual errors are correlated, and that is the physics talking: the
+steady-state temperature rise only constrains the RATIO P/h, which the data
+pins to 0.65%. The transient warm-up rate is what separates the two, and with
+1 C noise on 24 points that direction is soft - both parameters slide together
+along the P/h ridge. More early-time samples or lower noise would tighten the
+individual estimates; the ratio is already nailed.
+
 ### Baseline bake-off: same sparse data, full-field reconstruction
 
 24 noisy observations (3 sensors x 8 times, 1 C noise):
@@ -181,7 +201,8 @@ PDE, which is the entire point of the method.
   headline config, see the UQ section)
 - validate against a real tube with actual thermocouples
 - swap the synthetic Q for drive-current-derived power density
-- joint inversion of h AND Q amplitude from the same sparse data
+- joint inversion done (see above); next would be inverting the source
+  LOCATION and width too, or breaking the P/h ridge with early-time sampling
 
 ## Repo layout
 
