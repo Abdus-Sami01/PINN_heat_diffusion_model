@@ -66,7 +66,85 @@ Gaussian noise added to mimic real thermocouples.
 
 ## Results
 
-(to be filled from results/ once all runs complete)
+### Forward PINN vs FDM (no data at all, physics only)
+
+| metric | value |
+|---|---|
+| relative L2 error over the full (x,t) grid | **0.17%** |
+| max absolute error anywhere | 0.13 C |
+| final PDE residual | 5.9e-07 |
+
+![forward](figures/forward_pinn_vs_fdm.png)
+
+The soft-constraint version of this exact network was stuck at 29% error.
+The hard-constraint rewrite (cos features + time envelope) fixed it in one
+training run. Full story in FAILED_APPROACHES.md.
+
+### Inverse PINN: recovering h from sparse noisy sensors
+
+Headline case - 3 simulated thermocouples, 8 readings each, 1 C Gaussian
+noise, h initialized at 0.15 (3x wrong):
+
+| | h |
+|---|---|
+| true | 0.05 |
+| recovered | 0.05161 |
+| error | **3.23%** |
+
+![h convergence](figures/h_convergence.png)
+
+### Sensitivity: sensors x noise, PINN vs classical least-squares
+
+h recovery error (%), single seed per cell:
+
+| sensors | noise (C) | inverse PINN | FDM least-squares |
+|---|---|---|---|
+| 5 | 0.0 | 0.65 | 0.00 |
+| 5 | 1.0 | 3.50 | 1.41 |
+| 5 | 2.0 | 6.68 | 2.81 |
+| 3 | 0.0 | 0.68 | 0.00 |
+| 3 | 1.0 | 2.76 | 0.14 |
+| 3 | 2.0 | 1.93 | 0.27 |
+| 1 | 0.0 | 32.44 | 0.00 |
+| 1 | 1.0 | 62.45 | 7.21 |
+| 1 | 2.0 | 55.92 | 13.91 |
+
+![sensitivity](figures/sensitivity_h_recovery.png)
+![pinn vs ls](figures/pinn_vs_leastsquares.png)
+
+Two honest readings of this table:
+
+1. **Three sensors are enough, one is not.** With 3+ sensors the PINN pins h
+   within a few percent even at 2 C noise. A single off-center sensor makes
+   the problem badly under-determined for the PINN (30-60% error).
+2. **The classical baseline wins on pure h accuracy here, and that is
+   expected.** Least-squares fitting has an unfair advantage in this toy
+   setup: it uses the exact FDM forward model, the exact Q(x), and re-solves
+   the PDE dozens of times per fit. When the forward model is perfectly known
+   and cheap, classical fitting is the right tool. The PINN earns its keep
+   where that stops being true: it simultaneously reconstructs the full
+   temperature field, needs no repeated forward solves, and extends naturally
+   to partially-unknown physics (unknown Q, spatially-varying h). Claiming
+   the PINN "beats" least-squares on this table would be dishonest; it does a
+   different, bigger job at competitive parameter accuracy.
+
+Also noted: the 3-sensor/2C cell beating the 1C cell is single-seed noise
+luck - a proper study would average multiple noise realizations per cell.
+
+### Baseline bake-off: same sparse data, full-field reconstruction
+
+24 noisy observations (3 sensors x 8 times, 1 C noise):
+
+| model | uses physics | full grid rel L2 | max abs error (C) |
+|---|---|---|---|
+| forward PINN | yes | **0.17%** | 0.13 |
+| data-only NN | no | 20.7% | 20.6 |
+| LSTM | no | 37.3% | 54.2 |
+
+The data-only NN interpolates the 24 points and invents nonsense everywhere
+else. The LSTM never sees spatial structure at all, so asking it about new x
+positions fails completely (54 C errors). The PINN fills the gaps with the
+PDE, which is the entire point of the method.
 
 ## Honest limitations
 
