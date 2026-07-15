@@ -13,7 +13,7 @@ def main():
     for ns in sensor_counts:
         for nz in noise_levels:
             print("=== sensors", ns, "noise", nz, "===", flush=True)
-            model, h_final, h_err = train_inverse.train_inverse(
+            model, h_final, h_err, h_history = train_inverse.train_inverse(
                 n_sensors=ns, n_times=8, noise_std=nz,
                 adam_epochs=6000, lbfgs_steps=400,
                 seed=1, verbose=False)

@@ -36,6 +36,8 @@ def train_inverse(n_sensors=3, n_times=8, noise_std=1.0, h_init=0.15,
     w_data = 10.0
     n_col = 4000
 
+    h_history = []
+
     for epoch in range(adam_epochs):
         h = torch.nn.functional.softplus(h_raw)
 
@@ -52,6 +54,9 @@ def train_inverse(n_sensors=3, n_times=8, noise_std=1.0, h_init=0.15,
         loss.backward()
         opt.step()
         sched.step()
+
+        if epoch % 50 == 0:
+            h_history.append(float(h.item()))
 
         if verbose and epoch % 1000 == 0:
             print("epoch", epoch, "pde", round(float(lp.item()), 6),
@@ -79,15 +84,17 @@ def train_inverse(n_sensors=3, n_times=8, noise_std=1.0, h_init=0.15,
     h_final = float(torch.nn.functional.softplus(h_raw).item())
     h_err = abs(h_final - problem.h_true) / problem.h_true * 100.0
 
+    h_history.append(h_final)
+
     print("recovered h:", round(h_final, 5))
     print("true h:", problem.h_true)
     print("relative error:", round(h_err, 2), "percent")
 
-    return model, h_final, h_err
+    return model, h_final, h_err, h_history
 
 
 if __name__ == "__main__":
-    model, h_final, h_err = train_inverse()
+    model, h_final, h_err, h_history = train_inverse()
 
     if not os.path.exists("results"):
         os.makedirs("results")
@@ -96,3 +103,4 @@ if __name__ == "__main__":
         f.write("h_recovered " + str(h_final) + "\n")
         f.write("h_true " + str(problem.h_true) + "\n")
         f.write("h_rel_error_pct " + str(h_err) + "\n")
+    np.save("results/h_history.npy", np.array(h_history))
