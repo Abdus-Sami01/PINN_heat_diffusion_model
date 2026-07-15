@@ -188,6 +188,38 @@ pins to 0.65%. The transient warm-up rate is what separates the two, and with
 along the P/h ridge. More early-time samples or lower noise would tighten the
 individual estimates; the ratio is already nailed.
 
+### 2D radial extension: T(x, r, t) in the actual tube cross-section
+
+The 1D model treats convection as a volumetric sink, which is a radial
+average. The 2D axisymmetric model puts it where it physically lives - a
+Robin condition at the glass surface (r = R = 1 cm):
+
+```
+dT/dt = alpha * (T_xx + T_rr + (1/r) T_r) + Q(x)
+-dT/dr = beta * (T - T_ambient)   at r = R
+```
+
+With beta = h*R/(2*alpha) the radial average of the 2D solution should
+reproduce the 1D model exactly. The 2D FDM (`fdm_2d.py`) confirms this to
+0.15% - the two models are numerically the same physics, which validates
+both solvers at once.
+
+The 2D PINN (`pinn_2d.py`, `train_forward_2d.py`) keeps the hard-constraint
+recipe and adds one trick: the radial coordinate enters as rho = (r/R)^2,
+which makes the network symmetric about the axis by construction AND removes
+the 1/r singularity identically - in rho coordinates the cylindrical operator
+becomes (4/R^2)(rho*T_rhorho + T_rho), finite everywhere. Only the Robin
+surface condition remains as a soft loss term.
+
+| metric | value |
+|---|---|
+| relative L2 vs 2D FDM (x, r, t) | **0.19%** |
+| max abs error at t=50s | 0.15 C |
+| axis-to-surface temperature drop | 0.43 C (small Biot number, as expected) |
+
+![2d](figures/pinn2d_vs_fdm2d.png)
+![radial](figures/radial_profile.png)
+
 ### Baseline bake-off: same sparse data, full-field reconstruction
 
 24 noisy observations (3 sensors x 8 times, 1 C noise):
@@ -205,7 +237,6 @@ PDE, which is the entire point of the method.
 
 ## Honest limitations
 
-- 1D along the tube, not 2D radial - no cross-section temperature structure
 - ground truth is a numerical solver, not physical sensor data
 - radiative losses ignored, convection linearized with a single constant h
 - the heat source Q(x) is a synthetic Gaussian, not measured drive power
@@ -213,7 +244,8 @@ PDE, which is the entire point of the method.
 
 ## What I'd do differently / extensions
 
-- 2D (x, r) model of the tube cross-section
+- 2D (x, r) forward model done (see above); the 2D INVERSE problem
+  (recovering beta from surface-mounted sensors only) is the natural next step
 - extend the ensemble treatment to every sensitivity cell (done for the
   headline config, see the UQ section)
 - validate against a real tube with actual thermocouples
@@ -255,6 +287,8 @@ python3 baselines/lstm_baseline.py
 python3 ensemble_uq.py
 python3 joint_inverse.py
 python3 multiseed_sensitivity.py
+python3 fdm_2d.py
+python3 train_forward_2d.py
 ```
 
 Everything trains on CPU in minutes.

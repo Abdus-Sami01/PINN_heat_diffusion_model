@@ -1,0 +1,2 @@
+relative_l2 0.0018909239497433645
+stage adam_plus_lbfgs
