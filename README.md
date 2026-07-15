@@ -128,9 +128,27 @@ Two honest readings of this table:
    the PINN "beats" least-squares on this table would be dishonest; it does a
    different, bigger job at competitive parameter accuracy.
 
-Also noted: the 3-sensor/2C cell beating the 1C cell is single-seed noise
-luck - a proper study would average multiple noise realizations per cell.
-The ensemble section below quantifies exactly this seed-to-seed spread.
+The table above is one seed per cell (matched pairs with the least-squares
+column). Rerunning every cell with 3 independent seeds
+(`multiseed_sensitivity.py`) gives the statistically honest version:
+
+| sensors | noise (C) | h error mean +/- std (%) |
+|---|---|---|
+| 5 | 0.0 | 0.63 +/- 0.30 |
+| 5 | 1.0 | 2.12 +/- 1.37 |
+| 5 | 2.0 | 3.84 +/- 2.41 |
+| 3 | 0.0 | 1.92 +/- 1.65 |
+| 3 | 1.0 | 1.43 +/- 0.94 |
+| 3 | 2.0 | 1.00 +/- 0.69 |
+| 1 | 0.0 | 36.19 +/- 5.78 |
+| 1 | 1.0 | 67.14 +/- 7.80 |
+| 1 | 2.0 | 52.92 +/- 5.19 |
+
+What survives the averaging: the single-sensor breakdown is robust, not a
+fluke. What changes: at 3 sensors the three noise levels are statistically
+indistinguishable from each other - the error floor there comes from PINN
+approximation error, not from sensor noise. The apparent "2C beats 1C"
+oddity in the single-seed table was indeed seed luck.
 
 ### Uncertainty quantification: ensemble of 5 inverse PINNs
 
@@ -191,8 +209,7 @@ PDE, which is the entire point of the method.
 - ground truth is a numerical solver, not physical sensor data
 - radiative losses ignored, convection linearized with a single constant h
 - the heat source Q(x) is a synthetic Gaussian, not measured drive power
-- the sensitivity table is one seed per cell; only the headline configuration
-  got the full 5-member ensemble treatment
+- sensitivity cells use 3 seeds each; more seeds would tighten the stds
 
 ## What I'd do differently / extensions
 
@@ -236,6 +253,8 @@ python3 baselines/least_squares_h.py
 python3 baselines/data_only_nn.py
 python3 baselines/lstm_baseline.py
 python3 ensemble_uq.py
+python3 joint_inverse.py
+python3 multiseed_sensitivity.py
 ```
 
 Everything trains on CPU in minutes.
