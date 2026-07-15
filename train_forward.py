@@ -3,27 +3,13 @@ import numpy as np
 import torch
 
 import problem
-from pinn_model import PINN
-from losses import pde_loss, bc_loss, ic_loss, grad_norm
+from pinn_model import HardPINN
+from losses import pde_loss
+
+torch.set_num_threads(4)
 
 
-def sample_collocation(n, device):
-    x = torch.rand(n, 1) * problem.L
-    t = torch.rand(n, 1) * problem.T_total
-    return x.to(device), t.to(device)
-
-
-def sample_boundary(n, device):
-    t = torch.rand(n, 1) * problem.T_total
-    return t.to(device)
-
-
-def sample_initial(n, device):
-    x = torch.rand(n, 1) * problem.L
-    return x.to(device)
-
-
-def relative_l2(model, device):
+def relative_l2(model):
     x_grid, t_grid, T_grid = problem.get_ground_truth()
 
     xs = []
@@ -35,90 +21,72 @@ def relative_l2(model, device):
             ts.append(t_grid[j])
             truth.append(T_grid[i, j])
 
-    xt = torch.tensor(np.array(xs), dtype=torch.float32).view(-1, 1).to(device)
-    tt = torch.tensor(np.array(ts), dtype=torch.float32).view(-1, 1).to(device)
+    xt = torch.tensor(np.array(xs), dtype=torch.float32).view(-1, 1)
+    tt = torch.tensor(np.array(ts), dtype=torch.float32).view(-1, 1)
     truth = np.array(truth)
 
     model.eval()
     with torch.no_grad():
-        pred = model(xt, tt).cpu().numpy().flatten()
+        pred = model(xt, tt).numpy().flatten()
     model.train()
 
     return np.linalg.norm(pred - truth) / np.linalg.norm(truth)
 
 
-def train(adam_epochs=8000, lbfgs_steps=300, seed=0, verbose=True):
+def train(adam_epochs=12000, lbfgs_steps=1000, seed=0, verbose=True):
     torch.manual_seed(seed)
     np.random.seed(seed)
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    model = PINN(problem.L, problem.T_total, problem.T_ambient).to(device)
-
-    w_pde = 1.0
-    w_bc = 10.0
-    w_ic = 10.0
+    model = HardPINN(problem.L, problem.T_total, problem.T_ambient,
+                     tau=1.0 / problem.h_true)
 
     opt = torch.optim.Adam(model.parameters(), lr=1e-3)
+    sched = torch.optim.lr_scheduler.StepLR(opt, step_size=3000, gamma=0.5)
 
-    n_col = 3000
-    n_bc = 200
-    n_ic = 200
+    n_col = 4000
 
     for epoch in range(adam_epochs):
-        xc, tc = sample_collocation(n_col, device)
-        t_bc = sample_boundary(n_bc, device)
-        x_ic = sample_initial(n_ic, device)
+        x = torch.rand(n_col, 1) * problem.L
+        t = torch.rand(n_col, 1) * problem.T_total
 
-        lp = pde_loss(model, xc, tc, problem.alpha, problem.h_true,
-                      problem.Q_torch, problem.T_ambient)
-        lb = bc_loss(model, t_bc, problem.L)
-        li = ic_loss(model, x_ic, problem.T_ambient)
-
-        if epoch % 500 == 0 and epoch > 0:
-            gp = grad_norm(lp, model)
-            gb = grad_norm(lb, model)
-            gi = grad_norm(li, model)
-            total = gp + gb + gi
-            w_pde = float((total / (gp + 1e-8)).item())
-            w_bc = float((total / (gb + 1e-8)).item())
-            w_ic = float((total / (gi + 1e-8)).item())
-
-        loss = w_pde * lp + w_bc * lb + w_ic * li
+        loss = pde_loss(model, x, t, problem.alpha, problem.h_true,
+                        problem.Q_torch, problem.T_ambient)
 
         opt.zero_grad()
         loss.backward()
         opt.step()
+        sched.step()
 
-        if verbose and epoch % 500 == 0:
-            rel = relative_l2(model, device)
-            print("epoch", epoch, "loss", round(float(loss.item()), 5),
-                  "pde", round(float(lp.item()), 5),
-                  "bc", round(float(lb.item()), 5),
-                  "ic", round(float(li.item()), 5),
-                  "relL2", round(rel, 4))
+        if verbose and epoch % 1000 == 0:
+            rel = relative_l2(model)
+            print("epoch", epoch, "pde", round(float(loss.item()), 6),
+                  "relL2", round(rel, 5), flush=True)
 
-    xc, tc = sample_collocation(n_col, device)
-    t_bc = sample_boundary(n_bc, device)
-    x_ic = sample_initial(n_ic, device)
+    xf = torch.rand(6000, 1) * problem.L
+    tf = torch.rand(6000, 1) * problem.T_total
 
     lbfgs = torch.optim.LBFGS(model.parameters(), max_iter=lbfgs_steps,
                               history_size=50, line_search_fn="strong_wolfe")
 
     def closure():
         lbfgs.zero_grad()
-        lp = pde_loss(model, xc, tc, problem.alpha, problem.h_true,
-                      problem.Q_torch, problem.T_ambient)
-        lb = bc_loss(model, t_bc, problem.L)
-        li = ic_loss(model, x_ic, problem.T_ambient)
-        loss = w_pde * lp + w_bc * lb + w_ic * li
-        loss.backward()
-        return loss
+        l = pde_loss(model, xf, tf, problem.alpha, problem.h_true,
+                     problem.Q_torch, problem.T_ambient)
+        l.backward()
+        return l
 
     lbfgs.step(closure)
 
-    rel = relative_l2(model, device)
+    rel = relative_l2(model)
+    final_pde = pde_loss(model, xf, tf, problem.alpha, problem.h_true,
+                         problem.Q_torch, problem.T_ambient)
+    print("final pde loss", round(float(final_pde.item()), 8))
     print("final relative L2 error vs FDM:", round(rel, 5))
+
+    if rel < 0.03:
+        print("GATE PASS forward pinn is under 3 percent error")
+    else:
+        print("GATE FAIL still above 3 percent, do not proceed to phase 3")
 
     if not os.path.exists("results"):
         os.makedirs("results")
@@ -126,6 +94,7 @@ def train(adam_epochs=8000, lbfgs_steps=300, seed=0, verbose=True):
 
     with open("results/forward_metrics.txt", "w") as f:
         f.write("relative_l2 " + str(rel) + "\n")
+        f.write("final_pde_loss " + str(float(final_pde.item())) + "\n")
 
     return model, rel
 
