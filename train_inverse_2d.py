@@ -73,7 +73,7 @@ def inv_softplus(y):
 
 
 def train_inverse_2d(n_sensors=3, n_times=8, noise_std=1.0, beta_init=7.5,
-                     adam_epochs=12000, lbfgs_steps=500, seed=0,
+                     adam_epochs=16000, lbfgs_steps=500, seed=0,
                      verbose=True):
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -95,8 +95,11 @@ def train_inverse_2d(n_sensors=3, n_times=8, noise_std=1.0, beta_init=7.5,
     b_raw = torch.nn.Parameter(torch.tensor(inv_softplus(beta_init)))
 
     params = list(model.parameters()) + [b_raw]
-    opt = torch.optim.Adam(params, lr=1e-3)
-    sched = torch.optim.lr_scheduler.StepLR(opt, step_size=3000, gamma=0.5)
+    opt = torch.optim.Adam([
+        {"params": model.parameters(), "lr": 1e-3},
+        {"params": [b_raw], "lr": 2e-2},
+    ])
+    sched = torch.optim.lr_scheduler.StepLR(opt, step_size=5000, gamma=0.5)
 
     w_bc = 10.0
     w_data = 10.0
