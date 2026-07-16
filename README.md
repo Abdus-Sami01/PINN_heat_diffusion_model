@@ -220,6 +220,28 @@ surface condition remains as a soft loss term.
 ![2d](figures/pinn2d_vs_fdm2d.png)
 ![radial](figures/radial_profile.png)
 
+### 2D inverse: surface coefficient from surface-only sensors
+
+The most realistic scenario in the project: on a real tube you cannot put
+thermocouples inside the glass - they get glued to the OUTSIDE. So recover
+the Robin surface coefficient beta using only 3 noisy sensors at r = R
+(`train_inverse_2d.py`), beta initialized 3x wrong (7.5, true 2.5):
+
+| | value |
+|---|---|
+| recovered beta | 2.567 |
+| true beta | 2.5 |
+| error | **2.69%** |
+| equivalent 1D h | 0.0514 (true 0.05) |
+
+![beta](figures/beta_convergence.png)
+
+This took an iteration to get right: with a single shared learning rate the
+estimate crawled and training ended 39% off, still descending. The fix was
+giving the physical parameter its own param group at ~20x the network LR
+(details in FAILED_APPROACHES.md). Worth knowing if you ever chase an inverse
+parameter that starts far from the truth.
+
 ### Baseline bake-off: same sparse data, full-field reconstruction
 
 24 noisy observations (3 sensors x 8 times, 1 C noise):
@@ -244,8 +266,8 @@ PDE, which is the entire point of the method.
 
 ## What I'd do differently / extensions
 
-- 2D (x, r) forward model done (see above); the 2D INVERSE problem
-  (recovering beta from surface-mounted sensors only) is the natural next step
+- 2D forward AND 2D inverse both done (see above); next would be a
+  non-axisymmetric 3D model or spatially-varying beta(x) along the tube
 - extend the ensemble treatment to every sensitivity cell (done for the
   headline config, see the UQ section)
 - validate against a real tube with actual thermocouples
@@ -289,6 +311,7 @@ python3 joint_inverse.py
 python3 multiseed_sensitivity.py
 python3 fdm_2d.py
 python3 train_forward_2d.py
+python3 train_inverse_2d.py
 ```
 
 Everything trains on CPU in minutes.
