@@ -62,8 +62,17 @@ def pde_loss_spatial(model, h_net, x, t):
     return torch.mean(res ** 2)
 
 
+def smoothness_loss(h_net, x):
+    x = x.clone().detach().requires_grad_(True)
+    h = h_net(x)
+    h_x = torch.autograd.grad(h, x, grad_outputs=torch.ones_like(h),
+                              create_graph=True)[0]
+    return torch.mean(h_x ** 2)
+
+
 def train_spatial(n_sensors=7, n_times=10, noise_std=0.5,
-                  adam_epochs=16000, lbfgs_steps=500, seed=0, verbose=True):
+                  adam_epochs=16000, lbfgs_steps=500, seed=0,
+                  w_reg=5.0, verbose=True):
     torch.manual_seed(seed)
     np.random.seed(seed)
 
@@ -95,7 +104,8 @@ def train_spatial(n_sensors=7, n_times=10, noise_std=0.5,
 
         lp = pde_loss_spatial(model, h_net, x, t)
         ld = torch.mean((model(x_obs, t_obs) - T_obs) ** 2)
-        loss = lp + w_data * ld
+        lr_ = smoothness_loss(h_net, x)
+        loss = lp + w_data * ld + w_reg * lr_
 
         opt.zero_grad()
         loss.backward()
@@ -124,7 +134,8 @@ def train_spatial(n_sensors=7, n_times=10, noise_std=0.5,
     def closure():
         lbfgs.zero_grad()
         l = pde_loss_spatial(model, h_net, xf, tf) + \
-            w_data * torch.mean((model(x_obs, t_obs) - T_obs) ** 2)
+            w_data * torch.mean((model(x_obs, t_obs) - T_obs) ** 2) + \
+            w_reg * smoothness_loss(h_net, xf)
         l.backward()
         return l
 
@@ -133,10 +144,16 @@ def train_spatial(n_sensors=7, n_times=10, noise_std=0.5,
     xq = torch.linspace(0, problem.L, 100).view(-1, 1)
     with torch.no_grad():
         h_pred = h_net(xq).numpy().flatten()
-    h_tru = h_true_profile(np.linspace(0, problem.L, 100))
+    xnp = np.linspace(0, problem.L, 100)
+    h_tru = h_true_profile(xnp)
     herr = np.linalg.norm(h_pred - h_tru) / np.linalg.norm(h_tru)
 
-    print("h(x) recovery relative L2:", round(float(herr), 5))
+    span = (xnp >= 0.15) & (xnp <= 0.85)
+    herr_span = np.linalg.norm(h_pred[span] - h_tru[span]) / \
+        np.linalg.norm(h_tru[span])
+
+    print("h(x) recovery relative L2 full domain:", round(float(herr), 5))
+    print("h(x) recovery relative L2 sensor span:", round(float(herr_span), 5))
 
     if not os.path.exists("results"):
         os.makedirs("results")
@@ -146,8 +163,9 @@ def train_spatial(n_sensors=7, n_times=10, noise_std=0.5,
     np.save("results/spatial_h_true.npy", h_tru)
     with open("results/spatial_h_metrics.txt", "w") as f:
         f.write("h_profile_rel_l2 " + str(float(herr)) + "\n")
+        f.write("h_profile_rel_l2_sensor_span " + str(float(herr_span)) + "\n")
 
-    return herr
+    return herr, herr_span
 
 
 if __name__ == "__main__":
