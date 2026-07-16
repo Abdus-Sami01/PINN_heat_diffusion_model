@@ -26,13 +26,18 @@ def solve_fdm(alpha, h, Q_func, T_ambient, L, T_total, nx=100, nt=None):
 
     r = alpha * dt / (dx * dx)
 
+    if np.isscalar(h):
+        h_arr = np.full(nx, float(h))
+    else:
+        h_arr = np.asarray(h)
+
     for n in range(0, nt - 1):
         Tn = T[:, n]
         Tnew = np.zeros(nx)
 
         for i in range(1, nx - 1):
             diffusion = r * (Tn[i + 1] - 2.0 * Tn[i] + Tn[i - 1])
-            convection = h * (Tn[i] - T_ambient) * dt
+            convection = h_arr[i] * (Tn[i] - T_ambient) * dt
             source = Q_func(x[i], t[n]) * dt
             Tnew[i] = Tn[i] + diffusion - convection + source
 
