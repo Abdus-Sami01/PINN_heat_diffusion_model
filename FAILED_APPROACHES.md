@@ -7,3 +7,5 @@
 2026-07-15 | hard-IC envelope alone (exp2, tau=15) | still plateaued at pde ~0.48, peak ~34 | envelope fixes IC but the localized Gaussian source still underfits with plain (x,t) inputs - spectral bias | combine envelope WITH cosine Fourier features in x, not either alone
 
 2026-07-15 | running 3 torch training jobs in parallel on this container | CPU thread thrashing, every job froze at epoch 0 for 10+ min, all diagnostics timed out | run ONE training job at a time with OMP_NUM_THREADS=4 and torch.set_num_threads(4)
+
+2026-07-16 | 2d inverse beta recovery stuck at 39% error | single shared Adam LR (1e-3) for network weights AND the physical parameter | beta's gradient signal is weak (radial contrast 0.4C vs 1C noise) so it crawls, and the StepLR schedule decays before beta finishes traveling from the wrong init - the trajectory was still visibly descending when training ended | give the physical parameter its own param group with ~20x the network LR; beta then converges by epoch 11k and holds (final err 2.7%). Same trick likely applies to any inverse PINN where the unknown starts far from truth
