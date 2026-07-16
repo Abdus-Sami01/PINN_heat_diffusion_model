@@ -1,2 +1,2 @@
-h_profile_rel_l2 0.1352176114368994
-h_profile_rel_l2_sensor_span 0.11995571563482814
+h_profile_rel_l2 0.11531727138977572
+h_profile_rel_l2_sensor_span 0.060719741978373584

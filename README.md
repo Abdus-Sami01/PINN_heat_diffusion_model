@@ -242,6 +242,33 @@ giving the physical parameter its own param group at ~20x the network LR
 (details in FAILED_APPROACHES.md). Worth knowing if you ever chase an inverse
 parameter that starts far from the truth.
 
+### Function-space inverse: spatially-varying h(x)
+
+A real tube does not cool uniformly - mounting hardware and nearby walls
+suppress convection locally. So the final inverse problem drops the
+"single constant h" assumption entirely and recovers h as a FUNCTION of x
+(`train_spatial_h.py`): a second small network h_net(x) is optimized jointly
+with the temperature PINN, from 7 sensors x 10 readings with 0.5 C noise.
+True profile: a ramp with a fixture-shadow dip at x = 0.3.
+
+Getting this right required sweeping the smoothness regularizer - the
+classic bias-variance trade of ill-posed inverse problems, reproduced here
+end to end:
+
+| w_reg (Tikhonov) | h(x) error full domain | sensor span [0.15, 0.85] | behavior |
+|---|---|---|---|
+| 0 | 41.0% | - | oscillates between sensors, chases noise |
+| 5.0 | 13.5% | 12.0% | over-smoothed, dip flattened away |
+| 0.5 | **11.5%** | **6.1%** | dip, ramp and plateau all recovered |
+
+![spatial h](figures/spatial_h_recovery.png)
+
+Honest split: the sensor-span number is the meaningful one. Outside the
+sensor span the tube sits near ambient and NOTHING in the data constrains
+h there - the recovered profile just flattens. That end-collapse is genuine
+unidentifiability, not a training failure, which is why the metric is
+reported both ways.
+
 ### Baseline bake-off: same sparse data, full-field reconstruction
 
 24 noisy observations (3 sensors x 8 times, 1 C noise):
@@ -260,7 +287,8 @@ PDE, which is the entire point of the method.
 ## Honest limitations
 
 - ground truth is a numerical solver, not physical sensor data
-- radiative losses ignored, convection linearized with a single constant h
+- radiative losses ignored, convection linearized (though h may now vary
+  along the tube, see the h(x) section)
 - the heat source Q(x) is a synthetic Gaussian, not measured drive power
 - sensitivity cells use 3 seeds each; more seeds would tighten the stds
 
@@ -312,6 +340,7 @@ python3 multiseed_sensitivity.py
 python3 fdm_2d.py
 python3 train_forward_2d.py
 python3 train_inverse_2d.py
+python3 train_spatial_h.py
 ```
 
 Everything trains on CPU in minutes.
