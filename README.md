@@ -269,6 +269,44 @@ h there - the recovered profile just flattens. That end-collapse is genuine
 unidentifiability, not a training failure, which is why the metric is
 reported both ways.
 
+### Radiation: the missing-physics trap, and how to escape it
+
+Real tubes also lose heat by radiation (~ T^4), which the model so far
+ignores. The ground truth generator now supports it (`c_rad` in
+`fdm_reference.py`, calibrated so radiation carries 22% of the losses at
+operating temperature). Three studies (`train_radiation.py`,
+`train_radiation_hot.py`):
+
+**A. The trap.** Fit the radiation-blind linear model to radiative truth:
+
+| | h recovered | data fit (MSE) |
+|---|---|---|
+| radiation-blind inverse | 0.0627 (**+25% biased**) | 0.002 (excellent) |
+
+The wrong model fits the sensors beautifully and returns a confidently wrong
+"effective h" that silently absorbs the radiative loss - almost exactly the
+theoretical prediction h/(1-0.22) = 0.064. On a different geometry or drive
+level, that h would mispredict with no warning sign. This is the strongest
+argument in the repo for getting the physics term right.
+
+**B. The ridge.** Add the T^4 term with a learnable coefficient and recover
+h and c jointly at nominal power: individual errors are terrible (h -38%,
+c +137%) BUT the recovered TOTAL loss at operating temperature is within
+1.1% of truth. Over a 35 C rise, quartic and linear cooling differ in shape
+by only ~9%, and 0.5 C sensor noise buries that signal - the data pins the
+sum, not the split.
+
+**C. The escape.** Same algorithm, better EXPERIMENT: double the drive power
+(70 C rise, where T^4 deviates ~35% from linear) and use quieter sensors:
+
+| study | h error | c error |
+|---|---|---|
+| B: nominal power, 0.5 C noise | 38% | 137% |
+| C: 2x power, 0.25 C noise | **11%** | **35%** |
+
+Identifiability lives in the experiment, not the optimizer. If you need to
+separate convection from radiation on a real tube, run it hot.
+
 ### Baseline bake-off: same sparse data, full-field reconstruction
 
 24 noisy observations (3 sensors x 8 times, 1 C noise):
@@ -287,8 +325,9 @@ PDE, which is the entire point of the method.
 ## Honest limitations
 
 - ground truth is a numerical solver, not physical sensor data
-- radiative losses ignored, convection linearized (though h may now vary
-  along the tube, see the h(x) section)
+- radiation now modeled and studied (see the radiation section), but the
+  joint h+c split stays approximate unless the tube runs hot; convection
+  itself is still Newtonian
 - the heat source Q(x) is a synthetic Gaussian, not measured drive power
 - sensitivity cells use 3 seeds each; more seeds would tighten the stds
 
@@ -341,6 +380,8 @@ python3 fdm_2d.py
 python3 train_forward_2d.py
 python3 train_inverse_2d.py
 python3 train_spatial_h.py
+python3 train_radiation.py
+python3 train_radiation_hot.py
 ```
 
 Everything trains on CPU in minutes.

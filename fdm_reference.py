@@ -7,7 +7,8 @@ def make_Q(power, center, width):
     return Q
 
 
-def solve_fdm(alpha, h, Q_func, T_ambient, L, T_total, nx=100, nt=None):
+def solve_fdm(alpha, h, Q_func, T_ambient, L, T_total, nx=100, nt=None,
+              c_rad=0.0):
     dx = L / (nx - 1)
 
     dt_stable = dx * dx / (2.0 * alpha)
@@ -38,8 +39,13 @@ def solve_fdm(alpha, h, Q_func, T_ambient, L, T_total, nx=100, nt=None):
         for i in range(1, nx - 1):
             diffusion = r * (Tn[i + 1] - 2.0 * Tn[i] + Tn[i - 1])
             convection = h_arr[i] * (Tn[i] - T_ambient) * dt
+            radiation = 0.0
+            if c_rad > 0.0:
+                TK = Tn[i] + 273.15
+                TaK = T_ambient + 273.15
+                radiation = c_rad * (TK ** 4 - TaK ** 4) * dt
             source = Q_func(x[i], t[n]) * dt
-            Tnew[i] = Tn[i] + diffusion - convection + source
+            Tnew[i] = Tn[i] + diffusion - convection - radiation + source
 
         Tnew[0] = Tnew[1]
         Tnew[nx - 1] = Tnew[nx - 2]
