@@ -12,13 +12,15 @@ torch.set_num_threads(4)
 c_rad_true = 1.2e-10
 
 
-def get_radiative_ground_truth():
-    Q = make_Q(problem.power, problem.center, problem.width)
+def get_radiative_ground_truth(power=None):
+    if power is None:
+        power = problem.power
+    Q = make_Q(power, problem.center, problem.width)
     return solve_fdm(problem.alpha, problem.h_true, Q, problem.T_ambient,
                      problem.L, problem.T_total, c_rad=c_rad_true)
 
 
-def pde_residual_rad(model, x, t, h, c_scaled):
+def pde_residual_rad(model, x, t, h, c_scaled, power=None):
     x = x.clone().detach().requires_grad_(True)
     t = t.clone().detach().requires_grad_(True)
 
@@ -30,7 +32,10 @@ def pde_residual_rad(model, x, t, h, c_scaled):
     T_xx = torch.autograd.grad(T_x, x, grad_outputs=torch.ones_like(T_x),
                                create_graph=True)[0]
 
-    Q = problem.Q_torch(x, t)
+    if power is None:
+        power = problem.power
+    Q = power * torch.exp(-((x - problem.center) ** 2) /
+                          (2.0 * problem.width * problem.width))
     res = T_t - problem.alpha * T_xx + h * (T - problem.T_ambient) - Q
 
     if c_scaled is not None:
@@ -46,11 +51,15 @@ def inv_softplus(y):
 
 
 def train_rad(include_radiation, n_sensors=5, n_times=10, noise_std=0.5,
-              adam_epochs=14000, lbfgs_steps=500, seed=0, verbose=True):
+              adam_epochs=14000, lbfgs_steps=500, seed=0, power=None,
+              verbose=True):
     torch.manual_seed(seed)
     np.random.seed(seed)
 
-    x_grid, t_grid, T_grid = get_radiative_ground_truth()
+    if power is None:
+        power = problem.power
+
+    x_grid, t_grid, T_grid = get_radiative_ground_truth(power)
     xs, ts, Ts = problem.sample_sensors(x_grid, t_grid, T_grid,
                                         n_sensors=n_sensors,
                                         n_times=n_times,
@@ -60,7 +69,8 @@ def train_rad(include_radiation, n_sensors=5, n_times=10, noise_std=0.5,
     t_obs = torch.tensor(ts, dtype=torch.float32).view(-1, 1)
     T_obs = torch.tensor(Ts, dtype=torch.float32).view(-1, 1)
 
-    model = HardPINN(problem.L, problem.T_total, problem.T_ambient, tau=15.0)
+    model = HardPINN(problem.L, problem.T_total, problem.T_ambient, tau=15.0,
+                     T_scale=20.0 * power)
 
     h_raw = torch.nn.Parameter(torch.tensor(inv_softplus(0.15)))
     phys = [h_raw]
@@ -85,7 +95,7 @@ def train_rad(include_radiation, n_sensors=5, n_times=10, noise_std=0.5,
         x = torch.rand(n_col, 1) * problem.L
         t = torch.rand(n_col, 1) * problem.T_total
 
-        lp = pde_residual_rad(model, x, t, h, c)
+        lp = pde_residual_rad(model, x, t, h, c, power)
         ld = torch.mean((model(x_obs, t_obs) - T_obs) ** 2)
         loss = lp + w_data * ld
 
@@ -113,7 +123,7 @@ def train_rad(include_radiation, n_sensors=5, n_times=10, noise_std=0.5,
         lbfgs.zero_grad()
         h = torch.nn.functional.softplus(h_raw)
         c = torch.nn.functional.softplus(c_raw) if include_radiation else None
-        l = pde_residual_rad(model, xf, tf, h, c) + \
+        l = pde_residual_rad(model, xf, tf, h, c, power) + \
             w_data * torch.mean((model(x_obs, t_obs) - T_obs) ** 2)
         l.backward()
         return l
